@@ -44,9 +44,7 @@ where v.per_cod is null
 
 
 /*Decisiones sobre la extracción inicial de datos de Persona Física:
-	
-	PER_COD es la clave primaria de la entidad
-	
+
 	PAI_COD es el código de país de nacimiento:
 		La tabla mestra origen es la codificada en el SAE como TBXCPAIS.
 		En el modelo propio adquiere el valor VAL_PAIS
@@ -354,7 +352,66 @@ where v.per_cod is null
 				Lo interesante, según la experta, es conocer de todos esos ámbitos, cuál es el de mayor amplitud.
 
 			(!) ¿Sería interesante obtener un histórico de los distintos ámbitos registrados por una persona?
+				--> Quizás lo interesante es detectar cuáles son los "hechos relevantes" posibles y construir 
+					para cada demanda una historia centrada en ellos.
 
 	Como en el caso de la tabla de datos personales, se excluye deliberadamente el conjunto de datos relacioandos con
 		mujeres víctimas de violencia de género.
 */
+
+/*
+Extracción de datos de contratos:
+
+	El campo de fecha de término no es obligatorio (hay contratos indefinidos). Para no dejar el campo vacío he indicado
+		ue cuando esté a nulo, su valor sea el de inicio -1 día. De forma que cuando se calcule la diferencia salga
+		negativo. 
+			[ ] No tengo claro si es una buena decisión. Permite establecer condiciones lógicas numéricas rápidamente
+				pero por otro lado me parece poco fino.
+		De esta forma, el campo DUR_CONTRATO tendrá el valor en días de la duración del contrato, y un valor -1 cuando la
+		finalización no esté registrada.
+
+	El campo Oferta_ID viene pocas veces con información relevante, pero podría ser de utilidad posteriormente cuando 
+	saquemos los datos de oferta y los crucemos.
+  
+
+*/
+
+select 	D.*,
+		D.FECHA_TERMINO_ID - D.FECHA_INICIO_ID as DUR_CONTRATO_CALC
+from 
+	(
+select 
+	P.PER_COD,
+	EDAD AS EDAD_PERS_REG,
+	to_date(fec_cont,'yyyymm') fec_cont,
+	empresa_id as CIF,
+	substr(UAG_REGISTRO_ID,3,2) as prov_registro,
+	substr(UAG_REGISTRO_ID,3,2)||MUN_CENTRO_TRAB_ID as MUN_TRABAJO,  --> Este no está bien.
+	decode(substr(UAG_REGISTRO_ID,1,2),'WW','S', 'N') as reg_telematico,
+	to_Date(LPAD(fecha_inicio_id,8,0),'ddmmyyyy') as FECHA_INICIO_ID,
+	NVL(to_Date(LPAD(FECHA_TERMINO_ID,8,0),'ddmmyyyy'),to_Date(LPAD(fecha_inicio_id,8,0),'ddmmyyyy')-1) as FECHA_TERMINO_ID,	
+	DURACION_CONTRATO AS DUR_CONTRATO_REG,
+	convenio_colectivo_id,	--> Pedir la tabla a Argos.
+	causa_obj_inter_id,  	--> Pedir al tabla a Argos.
+	decode(nvfor_id,'90','00','80','01','32','33','33','32',nvfor_id) niv_aca_cod,
+	oc_contrato_id as OCUP_CONTRATO,
+	ACTIVIDAD_CTA_COT_ID AS ACTI_ECO_COD,
+	NUM_TRABAJADORES_CTA_COT,
+	OFERTA_ID,
+	CNAE09_IND,						--> PEDIR TABLA DE EQUIVALENCIAS CNAE 09
+	NVL(CNO11_IND,0) AS CNO11_IND 	--> PEDIR TABLA DE TRANSFORMACIONES A 4 DÍGITOS.
+FROM 
+	F_CONTRATOS_SISPE_ARGOS F,
+	SI_PERS P
+WHERE
+	SUBSTR(PERSONA_12_ID,1,1) = P.PER_TIP_DOC AND
+	SUBSTR(PERSONA_12_ID,4,8) = P.PER_NUM_DOC AND
+	SUBSTR(PERSONA_12_ID,12,1) = P.PER_LET_DOC) D
+LEFT OUTER JOIN
+	(select per_cod from si_pers_cond_esp where cond_esp_val = '01') v
+ON D.per_cod = v.per_cod
+where v.per_cod is null
+
+
+	
+  
